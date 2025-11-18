@@ -1,0 +1,9 @@
+{
+  "GEMINI_API_KEY": "",
+  "THEME_PRIMARY_COLOR": "#4F46E5",
+  "THEME_SECONDARY_COLOR": "#E5E7EB",
+  "THEME_BACKGROUND_COLOR": "#F9FAFB",
+  "DOCX_FONT_SIZE": "11",
+  "GEMINI_MODEL": "gemini-2.5-flash-preview-09-2025",
+  "APP_THEME": "Night Mode"
+}

@@ -9,6 +9,7 @@ import io
 import re
 from datetime import datetime
 
+# Check for optional libraries
 try:
     from docx import Document
     DOCX_AVAILABLE = True
@@ -27,7 +28,7 @@ try:
 except ImportError:
     PIL_AVAILABLE = False
 
-# Themes. Added btn_success for consistency.
+# Themes Configuration
 THEMES = {
     "Day Mode": {
         "bg": "#f0f2f5", "fg": "#1f2937", "frame_bg": "#ffffff",
@@ -51,11 +52,14 @@ class NoteOrganizerApp:
         master.title("Note Organizer")
         master.geometry("950x850")
         
+        # Default to Day Mode, but load_config will override this if JSON says otherwise
         self.current_theme_name = "Day Mode"
         self.colors = THEMES[self.current_theme_name]
 
         self.api_key = ""
         self.api_url = ""
+        
+        # --- LOAD CONFIGURATION ---
         self.load_config()
 
         self.raw_text_content = ""
@@ -67,6 +71,7 @@ class NoteOrganizerApp:
         master.grid_columnconfigure(0, weight=1)
         master.grid_rowconfigure(2, weight=1)
 
+        # Header
         self.header_frame = tk.Frame(master)
         self.header_frame.grid(row=0, column=0, sticky="ew", padx=10, pady=5)
         
@@ -76,12 +81,14 @@ class NoteOrganizerApp:
         self.subtitle_label = tk.Label(self.header_frame, text="(Categorization + Tables)", font=("Helvetica", 10))
         self.subtitle_label.pack(side=tk.LEFT, padx=10)
 
+        # Main Container
         self.main_frame = tk.Frame(master, padx=10, pady=10)
         self.main_frame.grid(row=2, column=0, sticky="nsew")
         self.main_frame.grid_columnconfigure(0, weight=1)
         self.main_frame.grid_columnconfigure(1, weight=1)
         self.main_frame.grid_rowconfigure(0, weight=1)
 
+        # --- LEFT COLUMN: INPUT ---
         self.input_frame = tk.Frame(self.main_frame, padx=10, pady=10, relief=tk.GROOVE, bd=1)
         self.input_frame.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
         self.input_frame.grid_columnconfigure(0, weight=1)
@@ -116,6 +123,7 @@ class NoteOrganizerApp:
         self.process_button = tk.Button(self.input_frame, text="Categorize & Compile", command=self.start_processing_thread, font=("Helvetica", 11, "bold"), relief=tk.FLAT, pady=8)
         self.process_button.grid(row=6, column=0, sticky="ew")
 
+        # --- RIGHT COLUMN: OUTPUT ---
         self.output_frame = tk.Frame(self.main_frame, padx=10, pady=10, relief=tk.GROOVE, bd=1)
         self.output_frame.grid(row=0, column=1, sticky="nsew", padx=5, pady=5)
         self.output_frame.grid_columnconfigure(0, weight=1)
@@ -138,33 +146,50 @@ class NoteOrganizerApp:
         self.docx_btn = tk.Button(self.action_frame, text="Export DOCX", command=self.export_to_docx)
         self.docx_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
 
+        # Status Bar
         self.status_label = tk.Label(master, text="Ready.", bd=1, relief=tk.SUNKEN, anchor=tk.W, pady=5, padx=5)
         self.status_label.grid(row=3, column=0, sticky="ew")
 
-        # Progressbar for feedback
+        # Progressbar
         self.progress = ttk.Progressbar(master, mode='indeterminate')
         self.progress.grid(row=4, column=0, sticky="ew", padx=10, pady=(0,10))
         self.progress.grid_remove()
 
+        # Final Init Steps
         self.apply_theme()
         self.check_dependencies()
 
     def load_config(self):
+        """Loads config.json from the script's directory to ensure reliability."""
         cfg = {}
         try:
-            if os.path.exists("config.json"):
-                with open("config.json", "r", encoding="utf-8") as f:
+            # 1. Determine the absolute path to the folder where this script lives
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            config_path = os.path.join(script_dir, "config.json")
+
+            # 2. Load config from that explicit path
+            if os.path.exists(config_path):
+                with open(config_path, "r", encoding="utf-8") as f:
                     cfg = json.load(f)
-            # API key priority: config, then environment
+            else:
+                print(f"Warning: config.json not found at {config_path}")
+
+            # API key priority: config file, then environment variables
             self.api_key = cfg.get("GEMINI_API_KEY") or cfg.get("API_KEY") or os.environ.get("GEMINI_API_KEY") or os.environ.get("API_KEY") or ""
+            
+            # Get model name, default to a stable version if missing
             model_name = cfg.get("GEMINI_MODEL", "gemini-2.0-flash")
             self.api_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
+            
+            # Apply Theme from Config if present
             theme = cfg.get("APP_THEME")
             if theme in THEMES:
                 self.current_theme_name = theme
                 self.colors = THEMES[theme]
+                
         except Exception as e:
-            print(f"Config Error: {e}")
+            print(f"Config Loading Error: {e}")
+            # Fallback if everything fails
             self.api_key = os.environ.get("GEMINI_API_KEY", "")
 
     def create_menu_bar(self):
@@ -195,17 +220,18 @@ class NoteOrganizerApp:
             self.current_theme_name = theme_var.get()
             self.colors = THEMES[self.current_theme_name]
             self.apply_theme()
-            # persist
+            # Save preference to config.json if possible
             try:
-                cfg = {}
-                if os.path.exists("config.json"):
-                    with open("config.json","r",encoding="utf-8") as f:
+                script_dir = os.path.dirname(os.path.abspath(__file__))
+                config_path = os.path.join(script_dir, "config.json")
+                if os.path.exists(config_path):
+                    with open(config_path,"r",encoding="utf-8") as f:
                         cfg = json.load(f)
-                cfg["APP_THEME"] = self.current_theme_name
-                with open("config.json","w",encoding="utf-8") as f:
-                    json.dump(cfg, f, indent=2, ensure_ascii=False)
-            except Exception:
-                pass
+                    cfg["APP_THEME"] = self.current_theme_name
+                    with open(config_path,"w",encoding="utf-8") as f:
+                        json.dump(cfg, f, indent=2, ensure_ascii=False)
+            except Exception as e:
+                print(f"Error saving theme: {e}")
             settings_win.destroy()
 
         for theme_name in THEMES.keys():
@@ -315,7 +341,7 @@ class NoteOrganizerApp:
 
     def start_processing_thread(self):
         if not self.api_key:
-            messagebox.showerror("Error", "API Key missing in config.json or environment variable 'GEMINI_API_KEY'")
+            messagebox.showerror("Error", "API Key missing. Please check config.json or set GEMINI_API_KEY environment variable.")
             return
         
         if not self.raw_text_content and not self.image_payloads:
@@ -365,9 +391,15 @@ class NoteOrganizerApp:
                 "Content-Type": "application/json",
             }
 
+            # Add query param for API key
+            url_with_key = f"{self.api_url}?key={self.api_key}"
+
             # Use json= to let `requests` set content-type properly
-            resp = requests.post(self.api_url, headers=headers, json=payload, timeout=120)
-            resp.raise_for_status()
+            resp = requests.post(url_with_key, headers=headers, json=payload, timeout=120)
+            
+            if resp.status_code != 200:
+                raise Exception(f"API Error {resp.status_code}: {resp.text}")
+
             result = resp.json()
 
             # tolerant parsing of several plausible response shapes
@@ -401,7 +433,11 @@ class NoteOrganizerApp:
         self.compiled_output_text.insert(tk.END, text)
         self.compiled_output_text.config(state=tk.DISABLED)
         
-        self.status_label.config(text="Complete.", fg="green")
+        if text.startswith("Error:"):
+            self.status_label.config(text="Error occurred.", fg="red")
+            messagebox.showerror("Processing Error", text)
+        else:
+            self.status_label.config(text="Complete.", fg="green")
 
     def copy_output(self):
         self.master.clipboard_clear()
